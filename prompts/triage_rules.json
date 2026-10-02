@@ -1,0 +1,25 @@
+{
+  "_comment": "Shared by api/app/triage.py and the n8n Code node (embedded by scripts/build_workflow.py). Patterns run on lowercased text; they avoid \\b and \\w because those are ASCII-only in JavaScript. First match wins.",
+  "rules": [
+    ["spam", "https?://|казино|crypto|крипт|раскрут|seo[- ]?продвиж|заработ[а-яё]* от|viagra|ставки на спорт"],
+    ["complaint", "жалоб|не приш|не дошл|разбит|испорч|верн[а-яё]* деньг|возврат|ужас|обман|شكو|مكسور|لم يصل|استرجاع|complain|broken|refund"],
+    ["wholesale", "(?<![а-яё])опт(?:а|ом|ов[а-яё]*)?(?![а-яё])|партн[её]р|для магазин|кофе[ей]н|ресторан|дистриб|поставк|جملة|موزع|فندق|فنادق|متجر|مقهى|wholesale|distribut|horeca"],
+    ["order", "заказ|купить|хочу|доставк|набор|اطلب|أطلب|طلب|اشتري|أريد|order|buy"]
+  ],
+  "order_products": ["taiga", "linden", "buckwheat", "gift"],
+  "labels_ru": {
+    "order": "Заказ",
+    "wholesale": "Опт / партнёрство",
+    "question": "Вопрос",
+    "complaint": "Жалоба",
+    "spam": "Спам"
+  },
+  "urgency_ru": {"high": "Срочно", "normal": "Обычно", "low": "Не срочно"},
+  "default_urgency": {"order": "high", "complaint": "high", "wholesale": "normal", "question": "normal", "spam": "low"},
+  "icons": {"order": "🟢", "wholesale": "🔵", "question": "⚪️", "complaint": "🔴", "spam": "🚫"},
+  "reply_templates": {
+    "ru": "Здравствуйте, {name}! Спасибо за заявку — менеджер свяжется с вами в ближайшее время.",
+    "ar": "مرحبًا {name}، شكرًا لتواصلك معنا! سيتواصل معك أحد ممثلينا قريبًا.",
+    "en": "Hi {name}, thanks for reaching out! Our manager will contact you shortly."
+  }
+}

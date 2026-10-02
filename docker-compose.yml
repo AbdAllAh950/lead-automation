@@ -1,0 +1,29 @@
+# n8n (the main workflow) + the optional Python mirror of the same pipeline.
+#   cp .env.example .env   # fill in keys
+#   docker compose up -d
+#   docker compose exec n8n n8n import:workflow --input=/workflows/lead-triage.json
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:2.41.5   # the version the workflow was tested on
+    restart: unless-stopped
+    ports: ["5678:5678"]
+    environment:
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      WEBHOOK_URL: ${N8N_PUBLIC_URL:-http://localhost:5678/}
+      GENERIC_TIMEZONE: ${BUSINESS_TZ:-Europe/Moscow}
+      TZ: ${BUSINESS_TZ:-Europe/Moscow}
+      N8N_DIAGNOSTICS_ENABLED: "false"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n:/workflows:ro
+
+  api:   # optional: same logic without n8n (FastAPI), POST http://localhost:8000/lead
+    build: { context: ., dockerfile: api/Dockerfile }
+    restart: unless-stopped
+    env_file: .env
+    ports: ["8000:8000"]
+    volumes:
+      - ./data:/srv/api/data
+
+volumes:
+  n8n_data:

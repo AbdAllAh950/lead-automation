@@ -1,0 +1,462 @@
+{
+  "name": "Заявки с сайта → AI → Google Таблица + Telegram",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Заявки с сайта → AI → таблица + Telegram\n\n1. Откройте **Настройки** и впишите модель, ID таблицы и ID чата менеджера.\n2. Создайте три доступа (Credentials):\n   - **Header Auth** для нейросети: Name `Authorization`, Value `Api-Key …` (YandexGPT) или `Bearer …` (OpenAI-совместимые API);\n   - **Google Service Account** — и дайте его email доступ «Редактор» к таблице;\n   - **Telegram API** — токен бота от @BotFather.\n3. В таблице создайте лист **«Заявки»** с заголовками в первой строке:\n   `Дата, ID, Имя, Телефон, Категория, Срочность, Сводка, Сообщение, Источник, Язык, Черновик ответа, Разбор`\n4. Активируйте workflow. Адрес для формы сайта: `https://ВАШ-N8N/webhook/lead`\n\nФормат заявки (JSON): `name`, `phone`, `message`, `source`, `lang`, `product`, `qty`. Формы Tilda подключаются напрямую: Настройки сайта → Формы → Webhook.",
+        "height": 340,
+        "width": 660,
+        "color": 5
+      },
+      "id": "ad820ade-5f1e-5a69-a653-c2b19dfa5d59",
+      "name": "Как настроить",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -420
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Заявка не теряется\nЕсли нейросеть не ответила (лимит, сеть, неверный ключ), узел **«Категория и сводка»** разберёт заявку по ключевым словам из `prompts/triage_rules.json`. В таблице это видно в колонке «Разбор».",
+        "height": 170,
+        "width": 420
+      },
+      "id": "b99c444b-976c-5fef-8d1d-67bf680d02da",
+      "name": "Если AI недоступна",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        170
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "2ab4bed8-6d7a-5e96-bf69-7e1e079366f4",
+      "name": "Заявка с сайта",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "387e3826-403e-510c-9c15-965d68b49156"
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "57249b09-971e-5ca4-a903-20cde03f11aa",
+              "name": "llm_url",
+              "value": "https://ai.api.cloud.yandex.net/v1/chat/completions",
+              "type": "string"
+            },
+            {
+              "id": "f4cd5dfb-424e-5912-9018-465b488bb287",
+              "name": "llm_model",
+              "value": "gpt://ВАШ_FOLDER_ID/yandexgpt/latest",
+              "type": "string"
+            },
+            {
+              "id": "17f6969e-10ca-580b-b0ca-f2daa2dc4843",
+              "name": "sheet_id",
+              "value": "ВАШ_ID_GOOGLE_ТАБЛИЦЫ",
+              "type": "string"
+            },
+            {
+              "id": "1797448d-ae89-5e90-aac1-692652781b61",
+              "name": "telegram_chat_id",
+              "value": "ВАШ_CHAT_ID",
+              "type": "string"
+            },
+            {
+              "id": "2ccd8448-0c6c-5625-8c0a-769a9753f0f8",
+              "name": "timezone",
+              "value": "Europe/Moscow",
+              "type": "string"
+            },
+            {
+              "id": "bd20793c-5860-5f68-a3e7-57f7d9f31876",
+              "name": "system_prompt",
+              "value": "Ты — ассистент отдела продаж. Тебе приходит заявка с сайта. Определи:\n- category: одно из \"order\" (хочет купить), \"wholesale\" (опт, магазин, ресторан, партнёрство), \"question\" (вопрос без покупки), \"complaint\" (жалоба, проблема с заказом), \"spam\" (реклама, бессмыслица, не про наш товар).\n- urgency: \"high\" (жалоба или готов купить сейчас), \"normal\", \"low\" (спам или не требует ответа).\n- summary: одна фраза по-русски для менеджера, до 20 слов: кто, что хочет, детали (количество, город, сроки).\n- reply_draft: короткий вежливый ответ клиенту на языке его сообщения (русский, арабский или английский), 1–2 предложения, без обещаний цен и сроков, которых нет в заявке.\nОтвечай только JSON без пояснений: {\"category\": \"...\", \"urgency\": \"...\", \"summary\": \"...\", \"reply_draft\": \"...\"}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "b9534353-6227-5faf-bffe-6a8f087d992b",
+      "name": "Настройки",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Проверка и очистка заявки. Те же правила, что в api/app/leads.py.\nconst cfg = $('Настройки').first().json;\nconst raw = $json.body || {};\nconst clean = (s) => String(s ?? '').replace(/\\s+/g, ' ').trim();\n// Свои формы шлют JSON (name, phone…). Tilda шлёт поля формы как Name / Phone / Comments,\n// а при подключении вебхука — проверочный запрос test=test, на него нужно ответить 200.\nconst pick = (...keys) => keys.map((k) => raw[k]).find((v) => v !== undefined && v !== '');\nconst b = {\n  name: pick('name', 'Name'), phone: pick('phone', 'Phone'),\n  message: pick('message', 'Comments', 'comments', 'comment', 'Textarea'),\n  source: pick('source') || (raw.formname ? 'tilda: ' + raw.formname : raw.tranid ? 'tilda' : ''),\n  lang: raw.lang, product: raw.product, qty: raw.qty, website: raw.website,\n};\n\nconst name = clean(b.name).slice(0, 100);\nconst digits = clean(b.phone).replace(/\\D/g, '');\nlet error = '';\nif (raw.test === 'test') error = 'ping';\nelse if (clean(b.website)) error = 'honeypot';      // скрытое поле заполняют только боты\nelse if (name.length < 2) error = 'name';\nelse if (digits.length < 9 || digits.length > 15) error = 'phone';\n\nlet phone = '+' + digits;                             // 8 921… / 921… → +7 921…\nif (digits.length === 11 && (digits[0] === '7' || digits[0] === '8')) phone = '+7' + digits.slice(1);\nelse if (digits.length === 10 && digits[0] === '9') phone = '+7' + digits;\n\nconst local = new Date().toLocaleString('sv-SE', { timeZone: cfg.timezone }).slice(0, 16);\nconst id = 'L-' + local.slice(0, 10).replace(/-/g, '') + '-' + local.slice(11, 16).replace(':', '') +\n  '-' + Math.random().toString(16).slice(2, 6);\nconst lang = ['ru', 'ar', 'en'].includes(b.lang) ? b.lang : 'ru';\nconst message = clean(b.message).slice(0, 4000);\nconst source = clean(b.source) || 'сайт';\nconst product = b.product ? String(b.product) : null;\n\nconst lead = { id, received_at: local, name, phone, message, source, lang, product, qty: b.qty ?? null };\nconst llm_user = `Имя: ${name}\\nТелефон: ${phone}\\nИсточник: ${source}\\nЯзык страницы: ${lang}\\n` +\n  `Товар: ${product || '-'}\\nСообщение: ${message}`;\n\nreturn { json: { valid: !error, error, lead, llm_user } };\n"
+      },
+      "id": "3b3c5add-923c-58a2-aa6b-c231325ead23",
+      "name": "Проверка и очистка",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "82981fc5-0bd6-5634-ab1a-dcb30cf624b8",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9ecdcde2-8c68-572b-805a-254510c2c3c0",
+      "name": "Заявка корректна?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Настройки').first().json.llm_url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('Настройки').first().json.llm_model, temperature: 0.1, max_tokens: 400, messages: [{ role: 'system', content: $('Настройки').first().json.system_prompt }, { role: 'user', content: $json.llm_user }] }) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "987646f9-c8a2-5039-be57-d641db35e1ee",
+      "name": "AI: разбор заявки",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "llmHeaderAuth01",
+          "name": "LLM API key"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Категория и сводка: берём ответ нейросети, а если её нет или ответ битый — правила по ключевым словам.\n// R подставляется из prompts/triage_rules.json скриптом scripts/build_workflow.py (тот же файл читает Python-версия).\nconst R = {\"rules\": [[\"spam\", \"https?://|казино|crypto|крипт|раскрут|seo[- ]?продвиж|заработ[а-яё]* от|viagra|ставки на спорт\"], [\"complaint\", \"жалоб|не приш|не дошл|разбит|испорч|верн[а-яё]* деньг|возврат|ужас|обман|شكو|مكسور|لم يصل|استرجاع|complain|broken|refund\"], [\"wholesale\", \"(?<![а-яё])опт(?:а|ом|ов[а-яё]*)?(?![а-яё])|партн[её]р|для магазин|кофе[ей]н|ресторан|дистриб|поставк|جملة|موزع|فندق|فنادق|متجر|مقهى|wholesale|distribut|horeca\"], [\"order\", \"заказ|купить|хочу|доставк|набор|اطلب|أطلب|طلب|اشتري|أريد|order|buy\"]], \"order_products\": [\"taiga\", \"linden\", \"buckwheat\", \"gift\"], \"labels_ru\": {\"order\": \"Заказ\", \"wholesale\": \"Опт / партнёрство\", \"question\": \"Вопрос\", \"complaint\": \"Жалоба\", \"spam\": \"Спам\"}, \"urgency_ru\": {\"high\": \"Срочно\", \"normal\": \"Обычно\", \"low\": \"Не срочно\"}, \"default_urgency\": {\"order\": \"high\", \"complaint\": \"high\", \"wholesale\": \"normal\", \"question\": \"normal\", \"spam\": \"low\"}, \"icons\": {\"order\": \"🟢\", \"wholesale\": \"🔵\", \"question\": \"⚪️\", \"complaint\": \"🔴\", \"spam\": \"🚫\"}, \"reply_templates\": {\"ru\": \"Здравствуйте, {name}! Спасибо за заявку — менеджер свяжется с вами в ближайшее время.\", \"ar\": \"مرحبًا {name}، شكرًا لتواصلك معنا! سيتواصل معك أحد ممثلينا قريبًا.\", \"en\": \"Hi {name}, thanks for reaching out! Our manager will contact you shortly.\"}};\nconst lead = $('Проверка и очистка').item.json.lead;\n\nfunction byRules() {\n  const text = (lead.message || '').toLowerCase();\n  let category = 'question';\n  for (const [cat, pattern] of R.rules) {\n    if (new RegExp(pattern, 'u').test(text)) { category = cat; break; }\n  }\n  if (category === 'question' && lead.product === 'wholesale') category = 'wholesale';\n  else if (category === 'question' && R.order_products.includes(lead.product)) category = 'order';\n  const label = R.labels_ru[category];\n  const tpl = R.reply_templates[lead.lang] || R.reply_templates.ru;\n  return {\n    category, urgency: R.default_urgency[category],\n    summary: lead.message ? `${label}: ${lead.message.slice(0, 120)}` : label,\n    reply_draft: tpl.replace('{name}', lead.name), by: 'rules',\n  };\n}\n\nfunction fromAI() {\n  const content = $json.choices?.[0]?.message?.content;\n  const match = content && content.match(/\\{[\\s\\S]*\\}/);   // модель иногда оборачивает JSON в ```\n  if (!match) return null;\n  let d;\n  try { d = JSON.parse(match[0]); } catch (e) { return null; }\n  const fb = byRules();\n  const category = R.labels_ru[d.category] ? d.category : fb.category;\n  const urgency = R.urgency_ru[d.urgency] ? d.urgency : R.default_urgency[category];\n  return {\n    category, urgency, by: 'ai',\n    summary: String(d.summary || fb.summary).trim(),\n    reply_draft: String(d.reply_draft || fb.reply_draft).trim(),\n  };\n}\n\nconst t = fromAI() || byRules();\nconst esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst lines = [\n  `${R.icons[t.category]} <b>${R.labels_ru[t.category]}</b>` + (t.urgency === 'high' ? ' · <b>срочно</b>' : ''),\n  `👤 ${esc(lead.name)} · <code>${esc(lead.phone)}</code>`,\n  `📝 ${esc(t.summary)}`,\n];\nif (lead.message) lines.push(`💬 <i>${esc(lead.message.slice(0, 600))}</i>`);\nlines.push(`✍️ Черновик ответа: ${esc(t.reply_draft)}`);\nlines.push(`🌐 ${esc(lead.source)} · ${lead.lang} · ${lead.id}`);\n\nreturn { json: {\n  'Дата': lead.received_at, 'ID': lead.id, 'Имя': lead.name, 'Телефон': lead.phone,\n  'Категория': R.labels_ru[t.category], 'Срочность': R.urgency_ru[t.urgency], 'Сводка': t.summary,\n  'Сообщение': lead.message, 'Источник': lead.source, 'Язык': lead.lang,\n  'Черновик ответа': t.reply_draft, 'Разбор': t.by === 'ai' ? 'AI' : 'правила',\n  category: t.category, telegram_text: lines.join('\\n'),\n} };\n"
+      },
+      "id": "5e007c9a-c022-5d88-b804-8c8d688cb606",
+      "name": "Категория и сводка",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Настройки').first().json.sheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Заявки",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {
+          "handlingExtraData": "ignoreIt"
+        }
+      },
+      "id": "7e2a8f96-e6fd-5c3f-bc20-f6f471a9247e",
+      "name": "Записать в таблицу",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1320,
+        0
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "googleSvcAcc01",
+          "name": "Google Service Account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f7d1f194-8eba-55f5-b287-270fdc54b772",
+              "leftValue": "={{ $('Категория и сводка').item.json.category }}",
+              "rightValue": "spam",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "23915056-da50-53fd-99aa-d292be07963b",
+      "name": "Не спам?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1540,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $('Настройки').first().json.telegram_chat_id }}",
+        "text": "={{ $('Категория и сводка').item.json.telegram_text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "6af1f39a-23d1-59e3-ba99-e7c7ba479755",
+      "name": "Сообщение менеджеру",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1760,
+        -160
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegramBot01",
+          "name": "Telegram bot"
+        }
+      },
+      "webhookId": "d8e81f3e-1e2c-5091-bfe3-65bb3e9f9185",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, id: $('Категория и сводка').item.json.ID, category: $('Категория и сводка').item.json.category }) }}",
+        "options": {}
+      },
+      "id": "38004d69-517d-522b-b0f2-fe62ad3531a1",
+      "name": "Ответ сайту",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1980,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify(['honeypot', 'ping'].includes($json.error) ? { ok: true } : { ok: false, error: $json.error }) }}",
+        "options": {
+          "responseCode": "={{ ['honeypot', 'ping'].includes($json.error) ? 200 : 400 }}"
+        }
+      },
+      "id": "03ce8e68-5ebb-563f-8549-685659babb14",
+      "name": "Ответ: ошибка",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        220
+      ]
+    }
+  ],
+  "connections": {
+    "Заявка с сайта": {
+      "main": [
+        [
+          {
+            "node": "Настройки",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Настройки": {
+      "main": [
+        [
+          {
+            "node": "Проверка и очистка",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Проверка и очистка": {
+      "main": [
+        [
+          {
+            "node": "Заявка корректна?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Заявка корректна?": {
+      "main": [
+        [
+          {
+            "node": "AI: разбор заявки",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ответ: ошибка",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: разбор заявки": {
+      "main": [
+        [
+          {
+            "node": "Категория и сводка",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Категория и сводка": {
+      "main": [
+        [
+          {
+            "node": "Записать в таблицу",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Записать в таблицу": {
+      "main": [
+        [
+          {
+            "node": "Не спам?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Не спам?": {
+      "main": [
+        [
+          {
+            "node": "Сообщение менеджеру",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ответ сайту",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Сообщение менеджеру": {
+      "main": [
+        [
+          {
+            "node": "Ответ сайту",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
